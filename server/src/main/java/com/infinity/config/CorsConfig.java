@@ -1,6 +1,6 @@
 package com.infinity.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -10,19 +10,46 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 @Configuration
+@ConfigurationProperties(prefix = "cors")
 public class CorsConfig {
 
-    @Value("${cors.allowed-origins}")
     private List<String> allowedOrigins;
-
-    @Value("${cors.allowed-methods}")
     private List<String> allowedMethods;
-
-    @Value("${cors.allowed-headers}")
     private String allowedHeaders;
-
-    @Value("${cors.allow-credentials}")
     private boolean allowCredentials;
+
+    // Getters and setters
+    public List<String> getAllowedOrigins() {
+        return allowedOrigins;
+    }
+
+    public void setAllowedOrigins(List<String> allowedOrigins) {
+        this.allowedOrigins = allowedOrigins;
+    }
+
+    public List<String> getAllowedMethods() {
+        return allowedMethods;
+    }
+
+    public void setAllowedMethods(List<String> allowedMethods) {
+        this.allowedMethods = allowedMethods;
+    }
+
+    public String getAllowedHeaders() {
+        return allowedHeaders;
+    }
+
+    public void setAllowedHeaders(String allowedHeaders) {
+        this.allowedHeaders = allowedHeaders;
+    }
+
+    public boolean isAllowCredentials() {
+        return allowCredentials;
+    }
+
+    public void setAllowCredentials(boolean allowCredentials) {
+        this.allowCredentials = allowCredentials;
+    }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
