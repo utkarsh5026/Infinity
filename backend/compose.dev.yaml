@@ -46,7 +46,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: docker/Dockerfile.dev
+      dockerfile: Dockerfile.dev
       target: development # Use multi-stage build with dev target
     container_name: infinity_backend_dev
     env_file:
@@ -94,7 +94,7 @@ services:
   celery:
     build:
       context: .
-      dockerfile: docker/Dockerfile.dev
+      dockerfile: Dockerfile.dev
       target: development
     container_name: infinity_celery_dev
     env_file:
@@ -128,7 +128,7 @@ services:
   flower:
     build:
       context: .
-      dockerfile: docker/Dockerfile.dev
+      dockerfile: Dockerfile.dev
     container_name: infinity_flower_dev
     environment:
       CELERY_BROKER_URL: redis://redis:6379
