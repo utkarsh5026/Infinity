@@ -1,6 +1,6 @@
-import os
-from typing import List, Optional, Any, Dict
-from pydantic import BaseSettings, validator, AnyHttpUrl
+from typing import List, Optional
+from pydantic import field_validator, AnyHttpUrl
+from pydantic_settings import BaseSettings
 from enum import Enum
 
 
@@ -37,10 +37,13 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
         "http://localhost:3000",
         "http://localhost:3001",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://localhost:5173",
     ]
 
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
     def assemble_cors_origins(cls, v: str | List[str]) -> List[str] | str:
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
@@ -48,14 +51,12 @@ class Settings(BaseSettings):
             return v
         raise ValueError(v)
 
-    # AI/LLM Configuration
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     DEFAULT_LLM_PROVIDER: str = "openai"
     MAX_TOKENS: int = 2000
     TEMPERATURE: float = 0.7
 
-    # Vector Database
     PINECONE_API_KEY: Optional[str] = None
     PINECONE_ENVIRONMENT: str = "us-west1-gcp"
     CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"
@@ -100,5 +101,4 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 
-# Create global settings instance
 settings = Settings()
