@@ -1,10 +1,9 @@
 import redis
 import json
-import logging
+from loguru import logger
 from typing import Optional, Any
 from app.config.settings import settings
-
-logger = logging.getLogger(__name__)
+from redis.typing import ResponseT
 
 
 class RedisClient:
@@ -23,14 +22,13 @@ class RedisClient:
                 settings.REDIS_URL,
                 decode_responses=True
             )
-            # Test connection
             self.redis_client.ping()
-            logger.info("Connected to Redis successfully")
+            logger.success("Connected to Redis successfully")
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self.redis_client = None
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Optional[ResponseT]:
         """Get value by key"""
         if not self.redis_client:
             return None
