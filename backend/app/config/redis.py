@@ -14,6 +14,10 @@ class RedisClient:
     def __init__(self):
         self.redis_client = None
 
+    def has_client(self) -> bool:
+        """Check if Redis client is connected"""
+        return self.redis_client is not None
+
     async def connect(self):
         """Connect to Redis"""
         try:
