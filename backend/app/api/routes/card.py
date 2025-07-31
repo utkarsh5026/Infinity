@@ -4,7 +4,8 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
-    status
+    status,
+    Response
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -13,7 +14,6 @@ from sqlalchemy.orm import selectinload
 from app.config import get_db
 from app.models import SavedCard, User
 from app.schemas.card import (
-    CardResponse,
     SaveCardRequest,
     SavedCardResponse
 )
@@ -48,36 +48,15 @@ async def save_card(
     db: AsyncSession = Depends(get_db)
 ):
     """Save a card for later review"""
-    # Check if already saved
-    result = await db.execute(
-        select(SavedCard).where(
-            and_(
-                SavedCard.user_id == current_user.id,
-                SavedCard.card_id == card_id
-            )
-        )
+    saved, is_new = await CardService.save_or_update_card(
+        db,
+        card_id=card_id,
+        user_id=current_user.id,
+        update_data=request
     )
-    existing = result.scalar_one_or_none()
 
-    if existing:
-        # Update existing
-        existing.folder = request.folder or existing.folder
-        existing.tags = request.tags or existing.tags
-        existing.notes = request.notes or existing.notes
-    else:
-        # Create new
-        saved_card = SavedCard(
-            user_id=current_user.id,
-            card_id=card_id,
-            folder=request.folder,
-            tags=request.tags,
-            notes=request.notes
-        )
-        db.add(saved_card)
-
-    await db.commit()
-
-    return saved_card
+    status_code = status.HTTP_201_CREATED if is_new else status.HTTP_200_OK
+    return Response(status_code=status_code, content=saved)
 
 
 @router.delete("/{card_id}/save", status_code=status.HTTP_204_NO_CONTENT)
