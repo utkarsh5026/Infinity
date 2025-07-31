@@ -1,0 +1,14 @@
+# Development Dependencies
+# Generated from pyproject.toml
+
+# Include production dependencies
+-r prod.txt
+
+# Testing
+pytest>=8.4.1
+pytest-asyncio>=1.1.0
+
+# Code Quality & Formatting
+black>=25.1.0
+isort>=6.0.1
+mypy>=1.17.0

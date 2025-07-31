@@ -1,0 +1,30 @@
+# Production Dependencies
+# Generated from pyproject.toml
+
+# Web Framework
+fastapi>=0.116.1,<0.117.0
+uvicorn[standard]>=0.35.0,<0.36.0
+
+# Database
+sqlalchemy>=2.0.41,<3.0.0
+alembic>=1.16.4,<2.0.0
+aiosqlite>=0.21.0,<0.22.0
+databases[sqlite]>=0.9.0,<0.10.0
+
+# AI/ML
+langchain>=0.3.27,<0.4.0
+langchain-openai>=0.3.28,<0.4.0
+
+# Utilities
+python-multipart>=0.0.20,<0.0.21
+email-validator>=2.2.0,<3.0.0
+
+# Authentication & Security
+python-jose[cryptography]>=3.5.0,<4.0.0
+passlib[bcrypt]>=1.7.4,<2.0.0
+
+# Cache
+redis>=6.2.0,<7.0.0
+
+# Logging
+loguru>=0.7.3,<0.8.0
