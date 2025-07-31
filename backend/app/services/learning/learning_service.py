@@ -2,6 +2,7 @@ import asyncio
 import json
 import hashlib
 from typing import List, Dict, Optional, Set
+from dataclasses import dataclass, asdict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -18,6 +19,27 @@ from app.models import (
 from app.schemas.learning import QACard, QABatch, GenerationMode
 from app.config import redis_client, settings
 from .prompts import topic_analysis_prompt, qa_generation_prompt
+
+
+@dataclass(frozen=True)
+class TopicAnalysis:
+    """Topic analysis data"""
+    concepts: list[str]
+    hooks: list[str]
+    misconceptions: list[str]
+    prerequisites: list[str]
+    difficulty_range: dict[str, int]
+
+
+@dataclass(frozen=True)
+class LearningSessionData:
+    """Learning session data"""
+    topic: Topic
+    session: LearningSession
+    topic_analysis: TopicAnalysis
+    buffer: list[Card]
+    current_index: int
+    generation_task: Optional[asyncio.Task]
 
 
 class LearningService:
@@ -59,11 +81,11 @@ class LearningService:
 
         if not topic.topic_structure:
             topic_analysis = await self._analyze_topic(topic.name)
-            topic.topic_structure = topic_analysis
-            topic.core_concepts = topic_analysis["concepts"]
+            topic.topic_structure = asdict(topic_analysis)
+            topic.core_concepts = topic_analysis.concepts
             await self.db.commit()
         else:
-            topic_analysis = topic.topic_structure
+            topic_analysis = TopicAnalysis(**topic.topic_structure)
 
         session = LearningSession(
             user_id=user_id,
@@ -97,7 +119,7 @@ class LearningService:
         return {
             "session_id": session.id,
             "initial_cards": [self._card_to_dict(card) for card in initial_cards[:5]],
-            "total_concepts": len(topic_analysis["concepts"])
+            "total_concepts": len(topic_analysis.concepts)
         }
 
     async def get_next_card(self, session_id: str) -> Optional[Dict]:
@@ -129,12 +151,12 @@ class LearningService:
 
         return None
 
-    async def _analyze_topic(self, topic_name: str) -> Dict:
+    async def _analyze_topic(self, topic_name: str) -> TopicAnalysis:
         """Analyze topic structure using LLM"""
         cache_key = f"topic_analysis:{hashlib.md5(topic_name.encode()).hexdigest()}"
         cached = await redis_client.get(cache_key)
         if cached:
-            return json.loads(cached)
+            return TopicAnalysis(**json.loads(cached))
 
         messages = topic_analysis_prompt.format_messages(topic=topic_name)
 
@@ -146,22 +168,23 @@ class LearningService:
                 response = await self.fallback_llm.ainvoke(messages)
                 analysis = json.loads(response.content)
             else:
-                analysis = {
-                    "concepts": [f"{topic_name} Basics", f"Advanced {topic_name}"],
-                    "hooks": ["Interactive learning"],
-                    "misconceptions": [],
-                    "prerequisites": [],
-                    "difficulty_range": {"min": 1, "max": 5}
-                }
+                analysis = TopicAnalysis(
+                    concepts=[f"{topic_name} Basics",
+                              f"Advanced {topic_name}"],
+                    hooks=["Interactive learning"],
+                    misconceptions=[],
+                    prerequisites=[],
+                    difficulty_range={"min": 1, "max": 5}
+                )
 
-        await redis_client.setex(cache_key, 604800, json.dumps(analysis))
+        await redis_client.setex(cache_key, 604800, json.dumps(asdict(analysis)))
         return analysis
 
     async def _generate_initial_batch(
         self,
         topic: Topic,
         session: LearningSession,
-        topic_analysis: Dict
+        topic_analysis: TopicAnalysis
     ) -> list[Card]:
         """Generate initial batch of cards"""
         result = await self.db.execute(
@@ -175,11 +198,11 @@ class LearningService:
         if len(existing_cards) >= 5:
             return existing_cards[:5]
 
-        concepts_to_cover = topic_analysis["concepts"][:5]
+        concepts_to_cover = topic_analysis.concepts[:5]
         qa_batch = await self._generate_qa_batch(
             topic_name=topic.name,
             concepts=concepts_to_cover,
-            count=10,  # Generate extra for buffer
+            count=10,
             previous_questions=set()
         )
 
@@ -199,7 +222,6 @@ class LearningService:
 
         await self.db.commit()
 
-        # Update session
         session.card_queue = [card.id for card in cards]
         session.asked_questions = [card.question for card in cards]
         session.covered_concepts = concepts_to_cover
@@ -229,8 +251,7 @@ class LearningService:
         try:
             response = await self.primary_llm.ainvoke(messages)
             qa_batch = self.qa_parser.parse(response.content)
-        except Exception as e:
-            # Generate fallback content
+        except Exception:
             qa_batch = QABatch(
                 cards=[
                     QACard(
@@ -279,12 +300,10 @@ class LearningService:
         remaining = [c for c in all_concepts if c not in covered]
 
         if not remaining:
-            # Loop back with variations
             next_concepts = all_concepts[:3]
         else:
             next_concepts = remaining[:3]
 
-        # Generate new batch
         qa_batch = await self._generate_qa_batch(
             topic_name=topic.name,
             concepts=next_concepts,
@@ -292,7 +311,6 @@ class LearningService:
             previous_questions=set(session.asked_questions)
         )
 
-        # Save new cards
         new_cards = []
         for qa_card in qa_batch.cards:
             card = Card(
@@ -328,7 +346,6 @@ class LearningService:
         if not session:
             return None
 
-        # Load cards
         card_ids = session.card_queue[session.current_card_index:]
         result = await self.db.execute(
             select(Card).where(Card.id.in_(card_ids))
