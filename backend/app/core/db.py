@@ -24,24 +24,21 @@ class DBOperationOptions(BaseModel):
     close: bool = False
     isolation_level: Optional[IsolationLevel] = None
 
-    limit: Optional[int] = Field(default=None, ge=1, le=100)
-    skip: Optional[int] = Field(default=0, ge=0)
+    limit: Optional[int] = Field(
+        default=None, ge=1, le=100, description="Limit the number of results")
+    skip: Optional[int] = Field(
+        default=0, ge=0, description="Skip the first n results")
 
-    # Sorting
     sort_by: Optional[str] = None
     sort_order: SortOrder = SortOrder.ASC
 
-    # Filtering
-    filters: Optional[Dict[str, Any]] = None
+    filters: Optional[dict[str, Any]] = None
 
-    # Performance options
     lazy_load: bool = True
     eager_load_relations: Optional[list[str]] = None
 
-    # Bulk operations
     batch_size: Optional[int] = Field(default=None, ge=1, le=1000)
 
-    # Query options
     include_soft_deleted: bool = False
     lock_rows: bool = False
 
