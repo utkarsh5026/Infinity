@@ -8,7 +8,11 @@ from redis.typing import ResponseT
 
 class RedisClient:
     """
-    Async Redis client for caching and session management
+    Async Redis client for caching and session management.
+
+    Note:
+        Always call connect() before using any Redis operations.
+        Call close() when shutting down the application to cleanup connections.
     """
 
     def __init__(self):
@@ -32,7 +36,18 @@ class RedisClient:
             self.redis_client = None
 
     async def get(self, key: str) -> Optional[ResponseT]:
-        """Get value by key"""
+        """
+        Retrieve and deserialize value from Redis by key.
+
+        Automatically deserializes JSON data back to Python objects.
+        Returns None if key doesn't exist or if not connected.
+
+        Args:
+            key (str): The Redis key to retrieve
+
+        Returns:
+            Optional[Any]: Deserialized value or None if not found/error
+        """
         if not self.redis_client:
             return None
 
@@ -46,7 +61,20 @@ class RedisClient:
             return None
 
     async def set(self, key: str, value: Any, ttl: int = None) -> bool:
-        """Set key-value pair with optional TTL"""
+        """
+        Store value in Redis with automatic JSON serialization and TTL.
+
+        Serializes Python objects to JSON before storing. Uses default TTL
+        from settings if not specified.
+
+        Args:
+            key (str): Redis key to store under
+            value (Any): Python object to store (must be JSON serializable)
+            ttl (Optional[int]): Time to live in seconds. Uses CACHE_TTL if None
+
+        Returns:
+            bool: True if stored successfully, False otherwise
+        """
         if not self.redis_client:
             return False
 
@@ -59,7 +87,15 @@ class RedisClient:
             return False
 
     async def delete(self, key: str) -> bool:
-        """Delete key"""
+        """
+        Delete key from Redis.
+
+        Args:
+            key (str): The Redis key to delete
+
+        Returns:
+            bool: True if deleted successfully, False otherwise
+        """
         if not self.redis_client:
             return False
 
@@ -81,7 +117,15 @@ class RedisClient:
             return False
 
     async def flush_all(self) -> bool:
-        """Flush all keys (use with caution)"""
+        """
+        Delete all keys from Redis database.
+
+        ⚠️  WARNING: This operation removes ALL data from the Redis database.
+        Use with extreme caution, especially in production environments.
+
+        Returns:
+            bool: True if operation succeeded, False otherwise
+        """
         if not self.redis_client:
             return False
 
@@ -92,7 +136,12 @@ class RedisClient:
             return False
 
     async def close(self):
-        """Close Redis connection"""
+        """
+        Close the Redis connection gracefully.
+
+        Should be called during application shutdown to ensure proper cleanup
+        of network connections.
+        """
         if self.redis_client:
             await self.redis_client.close()
 
