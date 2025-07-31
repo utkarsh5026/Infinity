@@ -12,22 +12,19 @@ services:
       POSTGRES_USER: infinity_user
       POSTGRES_PASSWORD: infinity_pass
       POSTGRES_DB: infinity_db
-      # Development optimizations
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Add init scripts for development data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U infinity_user"]
+      test: ["CMD-SHELL", "pg_isready -U infinity_user -d infinity_db"]
       interval: 5s
       timeout: 3s
       retries: 3
     networks:
       - infinity-dev
-    # Development-friendly postgres config
     command: postgres -c log_statement=all -c log_destination=stderr -c log_min_duration_statement=0
 
   redis:
@@ -53,11 +50,10 @@ services:
       target: development # Use multi-stage build with dev target
     container_name: infinity_backend_dev
     env_file:
-      - .env.dev # Use dedicated dev environment file
+      - .env.dev
     environment:
       DATABASE_URL: postgresql+asyncpg://infinity_user:infinity_pass@postgres:5432/infinity_db
       REDIS_URL: redis://redis:6379
-      # Development-specific settings
       DEBUG: "true"
       LOG_LEVEL: "DEBUG"
       RELOAD: "true"
