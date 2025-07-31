@@ -1,76 +1,73 @@
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
-from typing import Generator
-import logging
+from sqlalchemy import MetaData
+from typing import AsyncGenerator
+from loguru import logger
 
 from app.config.settings import settings
 
-logger = logging.getLogger(__name__)
 
 DATABASE_URL = settings.DATABASE_URL
 
 
-if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={
-            "check_same_thread": False,
-            "timeout": 20
-        },
-        poolclass=StaticPool,
-        echo=settings.DATABASE_ECHO
-    )
-else:
-    # PostgreSQL/MySQL configuration
-    engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        echo=settings.DATABASE_ECHO
-    )
-
-# Session configuration
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
+engine = create_async_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    echo=settings.DATABASE_ECHO
 )
 
-# Base class for models
+
+AsyncSessionLocal = async_sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+    class_=AsyncSession
+)
+
+
 Base = declarative_base()
 
-# Metadata for migrations
+
 metadata = MetaData()
 
 
-def get_db() -> Generator[Session, None, None]:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
-    Dependency to get database session
+    Async dependency to get database session
     """
-    db = SessionLocal()
-    try:
-        yield db
-    except Exception as e:
-        logger.error(f"Database error: {e}")
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        except Exception as e:
+            logger.error(f"Database error: {e}")
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
 
-def create_tables():
+async def create_tables():
     """
     Create all tables in the database
     """
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created")
 
 
-def drop_tables():
+async def drop_tables():
     """
     Drop all tables in the database
     """
-    Base.metadata.drop_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
     logger.info("Database tables dropped")
+
+
+async def close_db():
+    """
+    Close database engine
+    """
+    await engine.dispose()
+    logger.info("Database engine disposed")
