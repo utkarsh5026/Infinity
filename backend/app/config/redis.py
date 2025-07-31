@@ -16,24 +16,28 @@ class RedisClient:
     """
 
     def __init__(self):
-        self.redis_client = None
+        self._redis_client = None
 
     def has_client(self) -> bool:
         """Check if Redis client is connected"""
-        return self.redis_client is not None
+        return self._redis_client is not None
+
+    def get_internal_client(self):
+        """Get the internal Redis client for advanced operations"""
+        return self._redis_client
 
     async def connect(self):
         """Connect to Redis"""
         try:
-            self.redis_client = await redis.from_url(
+            self._redis_client = await redis.from_url(
                 settings.REDIS_URL,
                 decode_responses=True
             )
-            await self.redis_client.ping()
+            await self._redis_client.ping()
             logger.success("Connected to Redis successfully")
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
-            self.redis_client = None
+            self._redis_client = None
 
     async def get(self, key: str) -> Optional[ResponseT]:
         """
@@ -48,11 +52,11 @@ class RedisClient:
         Returns:
             Optional[Any]: Deserialized value or None if not found/error
         """
-        if not self.redis_client:
+        if not self._redis_client:
             return None
 
         try:
-            value = await self.redis_client.get(key)
+            value = await self._redis_client.get(key)
             if value:
                 return json.loads(value)
             return None
@@ -75,13 +79,13 @@ class RedisClient:
         Returns:
             bool: True if stored successfully, False otherwise
         """
-        if not self.redis_client:
+        if not self._redis_client:
             return False
 
         try:
             ttl = ttl or settings.CACHE_TTL
             serialized_value = json.dumps(value, default=str)
-            return await self.redis_client.setex(key, ttl, serialized_value)
+            return await self._redis_client.setex(key, ttl, serialized_value)
         except Exception as e:
             logger.error(f"Redis SET error: {e}")
             return False
@@ -96,22 +100,22 @@ class RedisClient:
         Returns:
             bool: True if deleted successfully, False otherwise
         """
-        if not self.redis_client:
+        if not self._redis_client:
             return False
 
         try:
-            return bool(await self.redis_client.delete(key))
+            return bool(await self._redis_client.delete(key))
         except Exception as e:
             logger.error(f"Redis DELETE error: {e}")
             return False
 
     async def exists(self, key: str) -> bool:
         """Check if key exists"""
-        if not self.redis_client:
+        if not self._redis_client:
             return False
 
         try:
-            return bool(await self.redis_client.exists(key))
+            return bool(await self._redis_client.exists(key))
         except Exception as e:
             logger.error(f"Redis EXISTS error: {e}")
             return False
@@ -126,11 +130,11 @@ class RedisClient:
         Returns:
             bool: True if operation succeeded, False otherwise
         """
-        if not self.redis_client:
+        if not self._redis_client:
             return False
 
         try:
-            return await self.redis_client.flushall()
+            return await self._redis_client.flushall()
         except Exception as e:
             logger.error(f"Redis FLUSHALL error: {e}")
             return False
@@ -142,8 +146,8 @@ class RedisClient:
         Should be called during application shutdown to ensure proper cleanup
         of network connections.
         """
-        if self.redis_client:
-            await self.redis_client.close()
+        if self._redis_client:
+            await self._redis_client.close()
 
 
 redis_client = RedisClient()
