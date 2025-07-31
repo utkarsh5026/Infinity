@@ -1,6 +1,9 @@
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy import (
-    String, Integer, Text, JSON
+    String,
+    Integer,
+    Text,
+    JSON
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncAttrs
@@ -13,7 +16,12 @@ if TYPE_CHECKING:
 
 
 class Topic(Base, AsyncAttrs, TimestampMixin, UUIDPrimaryKeyMixin):
-    """Learning topics and categories"""
+    """
+    Learning topics and categories.
+
+    Represents a subject or domain that contains learning cards and tracks
+    user progress through learning sessions.
+    """
     __tablename__ = "topics"
 
     name: Mapped[str] = mapped_column(String, unique=True, index=True)

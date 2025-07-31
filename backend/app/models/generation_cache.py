@@ -10,7 +10,12 @@ from app.config.database import Base
 
 
 class GenerationCache(Base, AsyncAttrs, TimestampMixin, UUIDPrimaryKeyMixin):
-    """Cache for LLM generations to reduce costs"""
+    """
+    Cache for LLM generations to reduce costs.
+
+    Stores responses from LLM models to reduce API calls and costs.
+    It is used to cache the responses from the LLM models to reduce the number of API calls and costs.
+    """
     __tablename__ = "generation_cache"
 
     topic: Mapped[str] = mapped_column(String, index=True)

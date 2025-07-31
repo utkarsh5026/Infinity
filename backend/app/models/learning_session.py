@@ -23,7 +23,12 @@ if TYPE_CHECKING:
 
 
 class LearningSession(Base, AsyncAttrs, TimestampMixin, UUIDPrimaryKeyMixin):
-    """User learning sessions"""
+    """
+    User learning sessions.
+
+    Tracks user progress through learning sessions, including the cards
+    they've viewed, the time spent, and the concepts they've covered.
+    """
     __tablename__ = "learning_sessions"
 
     user_id: Mapped[str] = mapped_column(
@@ -54,17 +59,17 @@ class LearningSession(Base, AsyncAttrs, TimestampMixin, UUIDPrimaryKeyMixin):
     total_time_seconds: Mapped[float] = mapped_column(Float, default=0.0)
 
     current_card_index: Mapped[int] = mapped_column(Integer, default=0)
-    card_queue: Mapped[List[str]] = mapped_column(
+    card_queue: Mapped[list[str]] = mapped_column(
         JSON,
         default=list,
         server_default="[]"
     )  # List of card IDs
-    asked_questions: Mapped[List[str]] = mapped_column(
+    asked_questions: Mapped[list[str]] = mapped_column(
         JSON,
         default=list,
         server_default="[]"
     )  # For duplicate prevention
-    covered_concepts: Mapped[List[str]] = mapped_column(
+    covered_concepts: Mapped[list[str]] = mapped_column(
         JSON,
         default=list,
         server_default="[]"

@@ -5,5 +5,9 @@ from .card_interaction import CardInteraction
 from .learning_session import LearningSession
 from .generation_cache import GenerationCache
 
-__all__ = ["User", "Topic", "Card", "CardInteraction",
-           "LearningSession", "GenerationCache"]
+__all__ = ["User",
+           "Topic",
+           "Card",
+           "CardInteraction",
+           "LearningSession",
+           "GenerationCache"]
