@@ -2,22 +2,22 @@ import asyncio
 import json
 import hashlib
 from typing import List, Dict, Optional, Set
-from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from langchain.chat_models import ChatOpenAI, ChatAnthropic
-from langchain.schema import SystemMessage, HumanMessage
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_core.output_parsers import PydanticOutputParser
 
 from app.models import (
-    Topic, Card, LearningSession
+    Topic,
+    Card,
+    LearningSession
 )
 from app.schemas.learning import QACard, QABatch, GenerationMode
-from app.config.settings import settings
-from app.config.redis import redis_client
+from app.config import redis_client, settings
+from .prompts import topic_analysis_prompt, qa_generation_prompt
 
 
 class LearningService:
@@ -26,12 +26,11 @@ class LearningService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-        # Initialize LLMs
         self.primary_llm = ChatOpenAI(
             model=settings.DEFAULT_LLM_MODEL,
             temperature=settings.LLM_TEMPERATURE,
             max_tokens=settings.LLM_MAX_TOKENS,
-            openai_api_key=settings.OPENAI_API_KEY
+            api_key=settings.OPENAI_API_KEY
         )
 
         if settings.ANTHROPIC_API_KEY:
@@ -43,74 +42,8 @@ class LearningService:
             )
         else:
             self.fallback_llm = None
-
-        # Output parser
         self.qa_parser = PydanticOutputParser(pydantic_object=QABatch)
-
-        # Prompt templates
-        self._init_prompts()
-
-        # Session management
-        self.active_sessions: Dict[str, Dict] = {}
-
-    def _init_prompts(self):
-        """Initialize prompt templates"""
-        self.topic_analysis_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are an expert educator creating engaging micro-learning content.
-            Analyze topics to create structured learning paths that are both educational and entertaining."""),
-            HumanMessage(content="""
-            Analyze this topic: {topic}
-            
-            Create a learning structure with:
-            1. 5-7 core concepts (ordered from basic to advanced)
-            2. Common misconceptions to address
-            3. Real-world hooks to make it engaging
-            
-            Format as JSON:
-            {{
-                "concepts": ["concept1", "concept2", ...],
-                "hooks": ["interesting fact", "surprising application", ...],
-                "misconceptions": ["myth1", "myth2", ...],
-                "prerequisites": ["prereq1", "prereq2", ...],
-                "difficulty_range": {{"min": 1, "max": 5}}
-            }}
-            """)
-        ])
-
-        self.qa_generation_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are a TikTok-style educator creating snappy, engaging Q&A cards.
-            
-            CRITICAL RULES:
-            - Questions: MAX 80 characters, intriguing, specific
-            - Answers: MAX 150 characters, MUST use markdown formatting
-            - Style: Engaging, surprising, "did you know?" vibe
-            - No explanations - just punchy Q&A
-            - Each card teaches ONE micro-concept
-            
-            Markdown formatting for answers:
-            - **bold** for emphasis
-            - `code` for technical terms
-            - Lists with - or * 
-            - ```lang for code blocks
-            
-            Make learning addictive!"""),
-
-            HumanMessage(content="""
-            Topic: {topic}
-            Concepts to cover: {concepts}
-            
-            Previous questions (NEVER repeat these):
-            {previous_questions}
-            
-            Generate {count} Q&A cards that:
-            1. Build on each other progressively
-            2. Are engaging and memorable
-            3. Use varied question types (what/why/how/when)
-            4. Include surprising facts or applications
-            
-            {format_instructions}
-            """)
-        ])
+        self.active_sessions: dict[str, dict] = {}
 
     async def initialize_session(
         self,
@@ -119,13 +52,11 @@ class LearningService:
         mode: GenerationMode = GenerationMode.STANDARD
     ) -> Dict:
         """Initialize a new learning session"""
-        # Get topic details
         result = await self.db.execute(
             select(Topic).where(Topic.id == topic_id)
         )
         topic = result.scalar_one()
 
-        # Check for existing topic analysis
         if not topic.topic_structure:
             topic_analysis = await self._analyze_topic(topic.name)
             topic.topic_structure = topic_analysis
@@ -134,7 +65,6 @@ class LearningService:
         else:
             topic_analysis = topic.topic_structure
 
-        # Create learning session
         session = LearningSession(
             user_id=user_id,
             topic_id=topic_id,
@@ -147,14 +77,12 @@ class LearningService:
         await self.db.commit()
         await self.db.refresh(session)
 
-        # Generate initial batch
         initial_cards = await self._generate_initial_batch(
             topic=topic,
             session=session,
             topic_analysis=topic_analysis
         )
 
-        # Store session in memory for fast access
         self.active_sessions[session.id] = {
             "topic": topic,
             "session": session,
@@ -164,7 +92,6 @@ class LearningService:
             "generation_task": None
         }
 
-        # Start background generation
         asyncio.create_task(self._maintain_buffer(session.id))
 
         return {
@@ -177,7 +104,6 @@ class LearningService:
         """Get next card from session buffer"""
         session_data = self.active_sessions.get(session_id)
         if not session_data:
-            # Load from DB if not in memory
             session_data = await self._load_session(session_id)
             if not session_data:
                 return None
@@ -210,19 +136,16 @@ class LearningService:
         if cached:
             return json.loads(cached)
 
-        # Generate analysis
-        messages = self.topic_analysis_prompt.format_messages(topic=topic_name)
+        messages = topic_analysis_prompt.format_messages(topic=topic_name)
 
         try:
             response = await self.primary_llm.ainvoke(messages)
             analysis = json.loads(response.content)
         except Exception as e:
-            # Fallback to secondary LLM if available
             if self.fallback_llm:
                 response = await self.fallback_llm.ainvoke(messages)
                 analysis = json.loads(response.content)
             else:
-                # Default structure
                 analysis = {
                     "concepts": [f"{topic_name} Basics", f"Advanced {topic_name}"],
                     "hooks": ["Interactive learning"],
@@ -231,9 +154,7 @@ class LearningService:
                     "difficulty_range": {"min": 1, "max": 5}
                 }
 
-        # Cache for 7 days
         await redis_client.setex(cache_key, 604800, json.dumps(analysis))
-
         return analysis
 
     async def _generate_initial_batch(
@@ -241,9 +162,8 @@ class LearningService:
         topic: Topic,
         session: LearningSession,
         topic_analysis: Dict
-    ) -> List[Card]:
+    ) -> list[Card]:
         """Generate initial batch of cards"""
-        # Check for existing cards
         result = await self.db.execute(
             select(Card)
             .where(Card.topic_id == topic.id)
@@ -255,9 +175,7 @@ class LearningService:
         if len(existing_cards) >= 5:
             return existing_cards[:5]
 
-        # Generate new cards
         concepts_to_cover = topic_analysis["concepts"][:5]
-
         qa_batch = await self._generate_qa_batch(
             topic_name=topic.name,
             concepts=concepts_to_cover,
@@ -300,7 +218,7 @@ class LearningService:
         prev_q_formatted = "\n".join(
             previous_questions) if previous_questions else "None"
 
-        messages = self.qa_generation_prompt.format_messages(
+        messages = qa_generation_prompt.format_messages(
             topic=topic_name,
             concepts=", ".join(concepts),
             previous_questions=prev_q_formatted,
