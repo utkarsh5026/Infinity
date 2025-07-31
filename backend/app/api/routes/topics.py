@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.topics import TopicService
 from app.config.database import get_db
 from app.schemas.topic import TopicResponse, TopicListResponse
+from backend.app.core.db import DBOperationOptions
 
 router = APIRouter(prefix="/topics", tags=["topics"])
 
@@ -19,7 +20,10 @@ async def get_topics(
     """Get list of available topics"""
 
     topics, total = await TopicService.get_topics(
-        db, category, search, skip, limit
+        db, category, search, options=DBOperationOptions(
+            skip=skip,
+            limit=limit
+        )
     )
 
     return TopicListResponse(
