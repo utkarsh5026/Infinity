@@ -1,48 +1,82 @@
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List
-from app.db.database import get_db
-from models.user import User
-from app.schemas.user import UserCreate, UserResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.config.database import get_db
+from app.models import User
+from app.schemas.user import Token, UserCreate, UserResponse
+from app.config.settings import settings
+from app.core.security import get_password_hash, verify_password, create_access_token
 
-router = APIRouter()
-
-
-@router.get("/", response_model=List[UserResponse])
-async def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Get all users"""
-    users = db.query(User).offset(skip).limit(limit).all()
-    return users
+router = APIRouter(prefix="/auth", tags=["authentication"])
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 
-@router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int, db: Session = Depends(get_db)):
-    """Get a specific user by ID"""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+@router.post("/register", response_model=UserResponse)
+async def register(user_create: UserCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Register a new user.
 
+    Args:
+        user_create (UserCreate): The user creation model.
+        db (AsyncSession): The database session.
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    """Create a new user"""
-    # Check if user already exists
-    existing_user = db.query(User).filter(
-        (User.username == user.username) | (User.email == user.email)
-    ).first()
-    if existing_user:
+    Returns:
+        UserResponse: The user response model.
+    """
+    result = await db.execute(
+        select(User).where(
+            (User.email == user_create.email) | (
+                User.username == user_create.username)
+        )
+    )
+    if result.scalar_one_or_none():
         raise HTTPException(
-            status_code=400, detail="Username or email already registered")
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email or username already registered"
+        )
 
-    # Create new user (in real app, hash the password)
+    hashed_password = get_password_hash(user_create.password)
     db_user = User(
-        username=user.username,
-        email=user.email,
-        # In real app: hash_password(user.password)
-        hashed_password=user.password
+        email=user_create.email,
+        username=user_create.username,
+        hashed_password=hashed_password,
+        full_name=user_create.full_name
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+
     return db_user
+
+
+@router.post("/token", response_model=Token)
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(User).where(
+            (User.username == form_data.username) | (
+                User.email == form_data.username)
+        )
+    )
+    user = result.scalar_one_or_none()
+
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    access_token = create_access_token(
+        subject=user.id,
+        expires_delta=access_token_expires
+    )
+
+    return Token(access_token=access_token, token_type="bearer")
