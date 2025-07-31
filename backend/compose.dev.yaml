@@ -1,0 +1,191 @@
+version: "3.8"
+
+networks:
+  infinity-dev:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: infinity_postgres_dev
+    environment:
+      POSTGRES_USER: infinity_user
+      POSTGRES_PASSWORD: infinity_pass
+      POSTGRES_DB: infinity_db
+      # Development optimizations
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Add init scripts for development data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infinity_user"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - infinity-dev
+    # Development-friendly postgres config
+    command: postgres -c log_statement=all -c log_destination=stderr -c log_min_duration_statement=0
+
+  redis:
+    image: redis:7-alpine
+    container_name: infinity_redis_dev
+    command: redis-server --appendonly yes --loglevel verbose
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - infinity-dev
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      target: development # Use multi-stage build with dev target
+    container_name: infinity_backend_dev
+    env_file:
+      - .env.dev # Use dedicated dev environment file
+    environment:
+      DATABASE_URL: postgresql+asyncpg://infinity_user:infinity_pass@postgres:5432/infinity_db
+      REDIS_URL: redis://redis:6379
+      # Development-specific settings
+      DEBUG: "true"
+      LOG_LEVEL: "DEBUG"
+      RELOAD: "true"
+      PYTHONPATH: /app
+      PYTHONDONTWRITEBYTECODE: 1
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8000:8000"
+      - "5678:5678" # Debugger port
+    volumes:
+      # Mount entire app directory for hot reloading
+      - ./app:/app/app:cached
+      - ./.env.dev:/app/.env.dev:ro
+      # Cache pip packages for faster rebuilds
+      - pip_cache:/root/.cache/pip
+      # Development tools
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - infinity-dev
+    # Enhanced development command with debug options
+    command: >
+      sh -c "
+        python -m pip install --no-deps -e . &&
+        uvicorn app.main:app 
+          --host 0.0.0.0 
+          --port 8000 
+          --reload 
+          --reload-dir /app/app
+          --log-level debug
+          --access-log
+      "
+
+  celery:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      target: development
+    container_name: infinity_celery_dev
+    env_file:
+      - .env.dev
+    environment:
+      DATABASE_URL: postgresql+asyncpg://infinity_user:infinity_pass@postgres:5432/infinity_db
+      REDIS_URL: redis://redis:6379
+      DEBUG: "true"
+      LOG_LEVEL: "DEBUG"
+      PYTHONPATH: /app
+      PYTHONDONTWRITEBYTECODE: 1
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./app:/app/app:cached
+      - ./.env.dev:/app/.env.dev:ro
+      - pip_cache:/root/.cache/pip
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    networks:
+      - infinity-dev
+    # Development-friendly celery with auto-reload
+    command: >
+      sh -c "
+        python -m pip install --no-deps -e . &&
+        watchfiles 'celery -A app.tasks.celery_app worker --loglevel=debug --concurrency=2' /app/app
+      "
+
+  # Optional: Celery Flower for monitoring
+  flower:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: infinity_flower_dev
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379
+      FLOWER_PORT: 5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery
+    networks:
+      - infinity-dev
+    command: celery -A app.tasks.celery_app flower --port=5555
+    profiles:
+      - monitoring
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: infinity_pgadmin_dev
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@infinity.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - infinity-dev
+    profiles:
+      - tools
+
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:latest
+    container_name: infinity_redis_commander_dev
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - infinity-dev
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pip_cache:
+    driver: local
+  pgadmin_data:
+    driver: local

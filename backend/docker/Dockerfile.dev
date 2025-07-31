@@ -1,5 +1,5 @@
-# Use Python 3.12 slim image for development
-FROM python:3.12-slim
+# Base stage with common dependencies
+FROM python:3.12-slim AS base
 
 # Set environment variables for development
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -17,19 +17,32 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies
-COPY pyproject.toml ./
-RUN pip install --upgrade pip && \
-    pip install -e .
+# Development stage
+FROM base AS development
+
+# Install Poetry
+RUN pip install poetry
+
+# Configure Poetry
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VENV_IN_PROJECT=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
+# Copy poetry files
+COPY pyproject.toml poetry.lock* ./
+
+# Install dependencies
+RUN poetry install --with dev && rm -rf $POETRY_CACHE_DIR
 
 # Install development dependencies
 RUN pip install \
-    pytest \
-    pytest-asyncio \
-    black \
-    isort \
-    mypy \
-    watchdog
+    pytest==8.4.1 \
+    pytest-asyncio==1.1.0 \
+    black==25.1.0 \
+    isort==6.0.1 \
+    mypy==1.17.0 \
+    watchfiles \
+    debugpy
 
 # Copy application code
 COPY . .
@@ -37,8 +50,8 @@ COPY . .
 # Create directories for logs and data
 RUN mkdir -p /app/logs /app/data
 
-# Expose port 8000
-EXPOSE 8000
+# Expose ports
+EXPOSE 8000 5678
 
 # Development command with hot reloading
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"] 
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
