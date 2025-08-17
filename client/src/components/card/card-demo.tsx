@@ -139,7 +139,7 @@ const LearningCardDemo = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4">
+    <div className="min-h-screen bg-gradient-to-br p-4 font-mono-fira bg-black">
       <div className="max-w-md mx-auto">
         {/* Header */}
         <div className="text-center mb-6">
