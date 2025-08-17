@@ -64,6 +64,6 @@ class UserUpdate(BaseModel):
 class UserPreferencesUpdate(BaseModel):
     preferred_difficulty: Optional[int] = Field(None, ge=1, le=5)
     learning_style: Optional[str] = Field(
-        None, regex="^(visual|textual|practical|mixed)$")
+        None, pattern="^(visual|textual|practical|mixed)$")
     daily_goal: Optional[int] = Field(None, ge=1, le=100)
     notification_enabled: Optional[bool] = None

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.topics import TopicService
 from app.config.database import get_db
 from app.schemas.topic import TopicResponse, TopicListResponse
-from backend.app.core.db import DBOperationOptions
+from app.core.db import DBOperationOptions
 
 router = APIRouter(prefix="/topics", tags=["topics"])
 

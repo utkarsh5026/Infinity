@@ -51,7 +51,7 @@ class SessionMetricsUpdate(BaseModel):
     card_id: str
     time_spent: float = Field(..., ge=0)
     answer_revealed: bool = False
-    action: str = Field(..., regex="^(view|skip|save|master)$")
+    action: str = Field(..., pattern="^(view|skip|save|master)$")
     confidence_rating: Optional[int] = Field(None, ge=1, le=5)
 
 
