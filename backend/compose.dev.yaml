@@ -78,18 +78,6 @@ services:
         condition: service_healthy
     networks:
       - infinity-dev
-    # Enhanced development command with debug options
-    command: >
-      sh -c "
-        python -m pip install --no-deps -e . &&
-        uvicorn app.main:app 
-          --host 0.0.0.0 
-          --port 8000 
-          --reload 
-          --reload-dir /app/app
-          --log-level debug
-          --access-log
-      "
 
   celery:
     build:
@@ -120,8 +108,7 @@ services:
     # Development-friendly celery with auto-reload
     command: >
       sh -c "
-        python -m pip install --no-deps -e . &&
-        watchfiles 'celery -A app.tasks.celery_app worker --loglevel=debug --concurrency=2' /app/app
+        poetry run watchfiles 'poetry run celery -A app.tasks.celery_app worker --loglevel=debug --concurrency=2' /app/app
       "
 
   # Optional: Celery Flower for monitoring

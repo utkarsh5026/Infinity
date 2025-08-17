@@ -22,35 +22,28 @@ FROM base AS development
 # Install Poetry
 RUN pip install poetry
 
-# Configure Poetry
+# Configure Poetry - Move these to after poetry install
 ENV POETRY_NO_INTERACTION=1 \
     POETRY_VENV_IN_PROJECT=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
-# Copy poetry files AND README
+# Copy poetry files and README first for better layer caching
 COPY pyproject.toml poetry.lock* ./
+COPY README.md ./
 
-# Install dependencies
-RUN poetry install --with dev --no-root && rm -rf $POETRY_CACHE_DIR
-
-# Install development dependencies
-RUN pip install \
-    pytest==8.4.1 \
-    pytest-asyncio==1.1.0 \
-    black==25.1.0 \
-    isort==6.0.1 \
-    mypy==1.17.0 \
-    watchfiles \
-    debugpy
-
-# Copy application code
-COPY . .
+# Install dependencies (including dev dependencies)
+RUN poetry config virtualenvs.in-project true && \
+    poetry install --with dev --no-root && \
+    rm -rf $POETRY_CACHE_DIR
 
 # Create directories for logs and data
 RUN mkdir -p /app/logs /app/data
+
+# Copy application code
+COPY . .
 
 # Expose ports
 EXPOSE 8000 5678
 
 # Development command with hot reloading
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
+CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]

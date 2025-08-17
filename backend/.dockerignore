@@ -4,8 +4,6 @@
 .gitattributes
 
 # Documentation
-*.md
-README*
 LICENSE
 
 # Environment files
