@@ -45,4 +45,8 @@ isort = "^6.0.1"
 mypy = "^1.17.0"
 watchfiles = "^1.1.0"
 debugpy = "^1.8.16"
+jupyter = "^1.0.0"
+jupyterlab = "^4.0.0"
+ipykernel = "^6.29.0"
+notebook = "^7.0.0"
 
