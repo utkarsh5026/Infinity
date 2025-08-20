@@ -10,8 +10,9 @@ from app.schemas.card import SaveCardRequest
 class CardService:
     """Service for managing card operations"""
 
+    @classmethod
     async def get_card_by_id(
-        self,
+        cls,
         db: AsyncSession,
         card_id: str
     ):
@@ -26,8 +27,9 @@ class CardService:
             )
         return card
 
+    @classmethod
     async def delete_card(
-        self,
+        cls,
         db: AsyncSession,
         card_id: str,
         user_id: str
@@ -51,8 +53,9 @@ class CardService:
         await db.delete(saved_card)
         await db.commit()
 
+    @classmethod
     async def save_or_update_card(
-        self,
+        cls,
         db: AsyncSession,
         card_id: str,
         user_id: str,
