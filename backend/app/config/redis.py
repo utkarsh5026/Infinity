@@ -16,138 +16,112 @@ class RedisClient:
     """
 
     def __init__(self):
-        self._redis_client = None
+        self._redis_connection = None
 
-    def has_client(self) -> bool:
+    def is_connected(self) -> bool:
         """Check if Redis client is connected"""
-        return self._redis_client is not None
+        return self._redis_connection is not None
 
-    def get_internal_client(self):
+    def get_raw_redis_client(self):
         """Get the internal Redis client for advanced operations"""
-        return self._redis_client
+        return self._redis_connection
 
-    async def connect(self):
+    async def connect_to_redis(self):
         """Connect to Redis"""
         try:
-            self._redis_client = await redis.from_url(
+            self._redis_connection = await redis.from_url(
                 settings.REDIS_URL,
                 decode_responses=True
             )
-            await self._redis_client.ping()
+            await self._redis_connection.ping()
             logger.success("Connected to Redis successfully")
-        except Exception as e:
-            logger.error(f"Failed to connect to Redis: {e}")
-            self._redis_client = None
+        except Exception as redis_connection_error:
+            logger.error(f"Failed to connect to Redis: {redis_connection_error}")
+            self._redis_connection = None
 
-    async def get(self, key: str) -> Optional[ResponseT]:
+    async def get_value(self, redis_key: str) -> Optional[ResponseT]:
         """
         Retrieve and deserialize value from Redis by key.
 
         Automatically deserializes JSON data back to Python objects.
         Returns None if key doesn't exist or if not connected.
-
-        Args:
-            key (str): The Redis key to retrieve
-
-        Returns:
-            Optional[Any]: Deserialized value or None if not found/error
         """
-        if not self._redis_client:
+        if not self._redis_connection:
             return None
 
         try:
-            value = await self._redis_client.get(key)
-            if value:
-                return json.loads(value)
+            cached_value = await self._redis_connection.get(redis_key)
+            if cached_value:
+                return json.loads(cached_value)
             return None
-        except Exception as e:
-            logger.error(f"Redis GET error: {e}")
+        except Exception as redis_get_error:
+            logger.error(f"Redis GET error: {redis_get_error}")
             return None
 
-    async def set(self, key: str, value: Any, ttl: int = None) -> bool:
+    async def set_value(self, redis_key: str, data_to_cache: Any, expiration_seconds: Optional[int] = None) -> bool:
         """
         Store value in Redis with automatic JSON serialization and TTL.
 
         Serializes Python objects to JSON before storing. Uses default TTL
         from settings if not specified.
-
-        Args:
-            key (str): Redis key to store under
-            value (Any): Python object to store (must be JSON serializable)
-            ttl (Optional[int]): Time to live in seconds. Uses CACHE_TTL if None
-
-        Returns:
-            bool: True if stored successfully, False otherwise
         """
-        if not self._redis_client:
+        if not self._redis_connection:
             return False
 
         try:
-            ttl = ttl or settings.CACHE_TTL
-            serialized_value = json.dumps(value, default=str)
-            return await self._redis_client.setex(key, ttl, serialized_value)
-        except Exception as e:
-            logger.error(f"Redis SET error: {e}")
+            time_to_live = expiration_seconds or settings.CACHE_TTL
+            serialized_data = json.dumps(data_to_cache, default=str)
+            return await self._redis_connection.setex(redis_key, time_to_live, serialized_data)
+        except Exception as redis_set_error:
+            logger.error(f"Redis SET error: {redis_set_error}")
             return False
 
-    async def delete(self, key: str) -> bool:
+    async def delete_key(self, redis_key: str) -> bool:
         """
         Delete key from Redis.
-
-        Args:
-            key (str): The Redis key to delete
-
-        Returns:
-            bool: True if deleted successfully, False otherwise
         """
-        if not self._redis_client:
+        if not self._redis_connection:
             return False
 
         try:
-            return bool(await self._redis_client.delete(key))
-        except Exception as e:
-            logger.error(f"Redis DELETE error: {e}")
+            return bool(await self._redis_connection.delete(redis_key))
+        except Exception as redis_delete_error:
+            logger.error(f"Redis DELETE error: {redis_delete_error}")
             return False
 
-    async def exists(self, key: str) -> bool:
+    async def key_exists(self, redis_key: str) -> bool:
         """Check if key exists"""
-        if not self._redis_client:
+        if not self._redis_connection:
             return False
 
         try:
-            return bool(await self._redis_client.exists(key))
-        except Exception as e:
-            logger.error(f"Redis EXISTS error: {e}")
+            return bool(await self._redis_connection.exists(redis_key))
+        except Exception as redis_exists_error:
+            logger.error(f"Redis EXISTS error: {redis_exists_error}")
             return False
 
-    async def flush_all(self) -> bool:
+    async def flush_entire_database(self) -> bool:
         """
         Delete all keys from Redis database.
-
-        ⚠️  WARNING: This operation removes ALL data from the Redis database.
-        Use with extreme caution, especially in production environments.
-
-        Returns:
-            bool: True if operation succeeded, False otherwise
         """
-        if not self._redis_client:
+        if not self._redis_connection:
             return False
 
         try:
-            return await self._redis_client.flushall()
-        except Exception as e:
-            logger.error(f"Redis FLUSHALL error: {e}")
+            return await self._redis_connection.flushall()
+        except Exception as redis_flush_error:
+            logger.error(f"Redis FLUSHALL error: {redis_flush_error}")
             return False
 
-    async def close(self):
+    async def close_connection(self):
         """
         Close the Redis connection gracefully.
 
         Should be called during application shutdown to ensure proper cleanup
         of network connections.
         """
-        if self._redis_client:
-            await self._redis_client.close()
+        if self._redis_connection:
+            await self._redis_connection.close()
 
 
 redis_client = RedisClient()
