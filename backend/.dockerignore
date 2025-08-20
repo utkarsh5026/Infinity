@@ -31,6 +31,8 @@ coverage.xml
 .mypy_cache/
 .dmypy.json
 dmypy.json
+notebooks/
+*.ipynb
 
 # Poetry
 poetry.lock
