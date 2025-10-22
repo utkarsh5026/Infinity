@@ -35,10 +35,6 @@ class UserService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ========================================================================
-    # User Registration & Authentication
-    # ========================================================================
-
     async def create_user(self, user_data: UserCreate) -> User:
         """
         Create a new user account
@@ -56,13 +52,11 @@ class UserService:
         if existing_user:
             raise DuplicateError("Email already registered")
 
-        # Check if username already exists (if provided)
         if user_data.username:
             existing_username = await self.get_user_by_username(user_data.username)
             if existing_username:
                 raise DuplicateError("Username already taken")
 
-        # Create user with hashed password
         user = User(
             email=user_data.email,
             username=user_data.username,
@@ -114,11 +108,9 @@ class UserService:
         if not user.is_active:
             raise AuthenticationError("Account is deactivated")
 
-        # Update last login time
         user.last_login_at = datetime.now(timezone.utc)
         await self.db.commit()
 
-        # Generate tokens
         access_token = create_access_token(subject=str(user.id))
         refresh_token = create_refresh_token(subject=str(user.id))
 
@@ -146,7 +138,8 @@ class UserService:
     async def get_user_by_username(self, username: str) -> Optional[User]:
         """Get user by username"""
         result = await self.db.execute(
-            select(User).where(func.lower(User.username) == func.lower(username))
+            select(User).where(func.lower(
+                User.username) == func.lower(username))
         )
         return result.scalar_one_or_none()
 
@@ -190,14 +183,14 @@ class UserService:
     async def update_user_profile(
         self,
         user_id: int,
-        update_data: UserUpdate
+        updated: UserUpdate
     ) -> User:
         """
         Update user profile
 
         Args:
             user_id: User ID
-            update_data: Updated profile data
+            updated: Updated profile data
 
         Returns:
             Updated user object
@@ -210,25 +203,23 @@ class UserService:
         if not user:
             raise NotFoundError("User not found")
 
-        # Check for conflicts
-        if update_data.email and update_data.email != user.email:
-            existing_email = await self.get_user_by_email(update_data.email)
+        if updated.email and updated.email != user.email:
+            existing_email = await self.get_user_by_email(updated.email)
             if existing_email:
                 raise DuplicateError("Email already in use")
-            user.email = update_data.email
+            user.email = updated.email
 
-        if update_data.username and update_data.username != user.username:
-            existing_username = await self.get_user_by_username(update_data.username)
+        if updated.username and updated.username != user.username:
+            existing_username = await self.get_user_by_username(updated.username)
             if existing_username:
                 raise DuplicateError("Username already taken")
-            user.username = update_data.username
+            user.username = updated.username
 
-        # Update other fields
-        if update_data.full_name is not None:
-            user.full_name = update_data.full_name
+        if not updated.full_name:
+            user.full_name = updated.full_name
 
-        if update_data.avatar_url is not None:
-            user.avatar_url = update_data.avatar_url
+        if not updated.avatar_url:
+            user.avatar_url = updated.avatar_url
 
         user.updated_at = datetime.now(timezone.utc)
 
@@ -264,11 +255,9 @@ class UserService:
         if not user:
             raise NotFoundError("User not found")
 
-        # Verify current password
         if not verify_password(password_data.current_password, user.hashed_password):
             raise AuthenticationError("Current password is incorrect")
 
-        # Update password
         user.hashed_password = get_password_hash(password_data.new_password)
         user.updated_at = datetime.now(timezone.utc)
 
@@ -302,10 +291,8 @@ class UserService:
         if not user:
             raise NotFoundError("User not found")
 
-        # Get current preferences
         current_prefs = user.preferences or {}
 
-        # Update only provided fields
         update_dict = preferences_data.model_dump(exclude_unset=True)
         for key, value in update_dict.items():
             if value is not None:
@@ -317,7 +304,8 @@ class UserService:
         await self.db.commit()
         await self.db.refresh(user)
 
-        logger.info(f"Preferences updated for user: {user.email} (ID: {user.id})")
+        logger.info(
+            f"Preferences updated for user: {user.email} (ID: {user.id})")
         return user.preferences
 
     async def get_preferences(self, user_id: int) -> Dict[str, Any]:
@@ -338,10 +326,6 @@ class UserService:
             raise NotFoundError("User not found")
 
         return user.preferences or self._get_default_preferences()
-
-    # ========================================================================
-    # Account Management
-    # ========================================================================
 
     async def deactivate_user(self, user_id: int) -> bool:
         """
@@ -414,10 +398,6 @@ class UserService:
         await self.db.commit()
         logger.info(f"User email verified: {user.email} (ID: {user.id})")
         return True
-
-    # ========================================================================
-    # Helper Methods
-    # ========================================================================
 
     @staticmethod
     def _get_default_preferences() -> Dict[str, Any]:
