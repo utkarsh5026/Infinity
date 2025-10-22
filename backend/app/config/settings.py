@@ -1,6 +1,6 @@
 from typing import List, Optional
-from pydantic import field_validator, AnyHttpUrl
-from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from enum import Enum
 
 
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Environment = Environment.DEVELOPMENT
 
     # Security
-    SECRET_KEY: str = "your-super-secret-key-change-in-production"
+    SECRET_KEY: str = "super-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     CACHE_TTL: int = 300  # 5 minutes
 
     # CORS
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
+    BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3000",
@@ -44,12 +44,12 @@ class Settings(BaseSettings):
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: str | List[str]) -> List[str] | str:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
+    def assemble_cors_origins(cls, v) -> List[str]:
+        if isinstance(v, str):
+            return [i.strip() for i in v.split(",") if i.strip()]
+        elif isinstance(v, list):
             return v
-        raise ValueError(v)
+        raise ValueError(f"Invalid BACKEND_CORS_ORIGINS value: {v}")
 
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
@@ -96,9 +96,11 @@ class Settings(BaseSettings):
     ALLOWED_FILE_TYPES: List[str] = [
         "image/jpeg", "image/png", "image/gif", "video/mp4"]
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        env_parse_none_str='null'
+    )
 
 
 settings = Settings()
