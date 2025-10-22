@@ -1,14 +1,15 @@
 """
 User model for authentication and user management
 """
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, Any
-from sqlalchemy import String, Boolean, JSON, func
+from sqlalchemy import String, Boolean, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.config.database import Base
+from app.models.mixins import TimestampMixin
 
 
-class User(Base):
+class User(Base, TimestampMixin):
     """
     User model for authentication and profile management
 
@@ -53,9 +54,7 @@ class User(Base):
     }
     """
 
-    # Metadata
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+    # Metadata (created_at and updated_at are provided by TimestampMixin)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
     # Relationships (will be defined when we create other models)
