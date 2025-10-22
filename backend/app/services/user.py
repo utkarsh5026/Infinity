@@ -96,7 +96,7 @@ class UserService:
 
     def _mark_updated(self, user: User) -> None:
         """Mark user as updated with current timestamp"""
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None).replace(tzinfo=None)
 
     async def _save_user(self, user: User) -> User:
         """
@@ -228,13 +228,18 @@ class UserService:
         if not user.is_active:
             raise AuthenticationError("Account is deactivated")
 
-        user.last_login_at = datetime.now(timezone.utc)
+
+        user_id = user.id
+        user_email = user.email
+
+        user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await self.db.commit()
+        await self.db.refresh(user)
 
-        access_token = create_access_token(subject=str(user.id))
-        refresh_token = create_refresh_token(subject=str(user.id))
+        access_token = create_access_token(subject=str(user_id))
+        refresh_token = create_refresh_token(subject=str(user_id))
 
-        logger.info(f"User authenticated: {user.email} (ID: {user.id})")
+        logger.info(f"User authenticated: {user_email} (ID: {user_id})")
         return user, access_token, refresh_token
 
 
@@ -443,7 +448,7 @@ class UserService:
             raise NotFoundError("User not found")
 
         user.is_active = False
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         await self.db.commit()
         logger.info(f"User deactivated: {user.email} (ID: {user.id})")
@@ -467,7 +472,7 @@ class UserService:
             raise NotFoundError("User not found")
 
         user.is_active = True
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         await self.db.commit()
         logger.info(f"User activated: {user.email} (ID: {user.id})")
@@ -491,7 +496,7 @@ class UserService:
             raise NotFoundError("User not found")
 
         user.is_verified = True
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         await self.db.commit()
         logger.info(f"User email verified: {user.email} (ID: {user.id})")
