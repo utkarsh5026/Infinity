@@ -25,7 +25,6 @@ from app.core.exceptions import (
     NotFoundError,
     AuthenticationError,
     DuplicateError,
-    ValidationError
 )
 
 
@@ -34,6 +33,131 @@ class UserService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    # ========================================================================
+    # Internal Helper Methods
+    # ========================================================================
+
+    async def _get_user_or_404(self, user_id: int) -> User:
+        """
+        Get user by ID or raise NotFoundError
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            User object
+
+        Raises:
+            NotFoundError: If user not found
+        """
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            raise NotFoundError("User not found")
+        return user
+
+    async def _check_email_availability(
+        self,
+        email: str,
+        exclude_user_id: Optional[int] = None
+    ) -> None:
+        """
+        Check if email is available, raise DuplicateError if not
+
+        Args:
+            email: Email to check
+            exclude_user_id: User ID to exclude from check (for updates)
+
+        Raises:
+            DuplicateError: If email is already in use
+        """
+        existing = await self.get_user_by_email(email)
+        if existing and existing.id != exclude_user_id:
+            raise DuplicateError("Email already in use")
+
+    async def _check_username_availability(
+        self,
+        username: str,
+        exclude_user_id: Optional[int] = None
+    ) -> None:
+        """
+        Check if username is available, raise DuplicateError if not
+
+        Args:
+            username: Username to check
+            exclude_user_id: User ID to exclude from check (for updates)
+
+        Raises:
+            DuplicateError: If username is already taken
+        """
+        existing = await self.get_user_by_username(username)
+        if existing and existing.id != exclude_user_id:
+            raise DuplicateError("Username already taken")
+
+    def _mark_updated(self, user: User) -> None:
+        """Mark user as updated with current timestamp"""
+        user.updated_at = datetime.now(timezone.utc)
+
+    async def _save_user(self, user: User) -> User:
+        """
+        Commit and refresh user
+
+        Args:
+            user: User object to save
+
+        Returns:
+            Refreshed user object
+        """
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def _update_user_flag(
+        self,
+        user_id: int,
+        flag_name: str,
+        value: bool,
+        log_message: str
+    ) -> bool:
+        """
+        Generic method to update user boolean flags
+
+        Args:
+            user_id: User ID
+            flag_name: Name of the boolean flag to update
+            value: New value for the flag
+            log_message: Log message to record
+
+        Returns:
+            True if successful
+
+        Raises:
+            NotFoundError: If user not found
+        """
+        user = await self._get_user_or_404(user_id)
+        setattr(user, flag_name, value)
+        self._mark_updated(user)
+        await self.db.commit()
+        logger.info(f"{log_message}: {user.email} (ID: {user.id})")
+        return True
+
+    @staticmethod
+    def _get_default_preferences() -> Dict[str, Any]:
+        """Get default user preferences for dual-agent system"""
+        return {
+            "learning_style": "logical",
+            "difficulty_level": "intermediate",
+            "buddy_personality": "enthusiastic",
+            "conversation_pace": "moderate",
+            "language": "en",
+            "enable_hints": True,
+            "enable_animations": True,
+            "theme": "light"
+        }
+
+    # ========================================================================
+    # User Creation and Authentication
+    # ========================================================================
 
     async def create_user(self, user_data: UserCreate) -> User:
         """
@@ -48,14 +172,10 @@ class UserService:
         Raises:
             DuplicateError: If email or username already exists
         """
-        existing_user = await self.get_user_by_email(user_data.email)
-        if existing_user:
-            raise DuplicateError("Email already registered")
+        await self._check_email_availability(user_data.email)
 
         if user_data.username:
-            existing_username = await self.get_user_by_username(user_data.username)
-            if existing_username:
-                raise DuplicateError("Username already taken")
+            await self._check_username_availability(user_data.username)
 
         user = User(
             email=user_data.email,
@@ -117,9 +237,6 @@ class UserService:
         logger.info(f"User authenticated: {user.email} (ID: {user.id})")
         return user, access_token, refresh_token
 
-    # ========================================================================
-    # User Retrieval
-    # ========================================================================
 
     async def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Get user by ID"""
@@ -130,10 +247,10 @@ class UserService:
 
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
-        result = await self.db.execute(
+        return (await self.db.execute(
             select(User).where(func.lower(User.email) == func.lower(email))
-        )
-        return result.scalar_one_or_none()
+        )).scalar_one_or_none()
+
 
     async def get_user_by_username(self, username: str) -> Optional[User]:
         """Get user by username"""
@@ -199,33 +316,26 @@ class UserService:
             NotFoundError: If user not found
             DuplicateError: If email/username already exists
         """
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            raise NotFoundError("User not found")
+        user = await self._get_user_or_404(user_id)
 
         if updated.email and updated.email != user.email:
-            existing_email = await self.get_user_by_email(updated.email)
-            if existing_email:
-                raise DuplicateError("Email already in use")
+            await self._check_email_availability(updated.email, user_id)
             user.email = updated.email
 
         if updated.username and updated.username != user.username:
-            existing_username = await self.get_user_by_username(updated.username)
-            if existing_username:
-                raise DuplicateError("Username already taken")
+            await self._check_username_availability(updated.username, user_id)
             user.username = updated.username
 
-        if not updated.full_name:
+        if updated.full_name is not None:
             user.full_name = updated.full_name
 
-        if not updated.avatar_url:
+        if updated.avatar_url is not None:
             user.avatar_url = updated.avatar_url
 
-        user.updated_at = datetime.now(timezone.utc)
+        self._mark_updated(user)
 
         try:
-            await self.db.commit()
-            await self.db.refresh(user)
+            await self._save_user(user)
             logger.info(f"User profile updated: {user.email} (ID: {user.id})")
             return user
         except IntegrityError:
@@ -251,35 +361,29 @@ class UserService:
             NotFoundError: If user not found
             AuthenticationError: If current password is incorrect
         """
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            raise NotFoundError("User not found")
+        user = await self._get_user_or_404(user_id)
 
         if not verify_password(password_data.current_password, user.hashed_password):
             raise AuthenticationError("Current password is incorrect")
 
         user.hashed_password = get_password_hash(password_data.new_password)
-        user.updated_at = datetime.now(timezone.utc)
+        self._mark_updated(user)
 
         await self.db.commit()
         logger.info(f"Password updated for user: {user.email} (ID: {user.id})")
         return True
 
-    # ========================================================================
-    # User Preferences Management (for Dual-Agent System)
-    # ========================================================================
-
     async def update_preferences(
         self,
         user_id: int,
-        preferences_data: UserPreferencesUpdate
+        pref: UserPreferencesUpdate
     ) -> Dict[str, Any]:
         """
         Update user preferences for dual-agent system
 
         Args:
             user_id: User ID
-            preferences_data: Updated preferences
+            pref: Updated preferences
 
         Returns:
             Updated preferences dictionary
@@ -287,22 +391,19 @@ class UserService:
         Raises:
             NotFoundError: If user not found
         """
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            raise NotFoundError("User not found")
+        user = await self._get_user_or_404(user_id)
 
         current_prefs = user.preferences or {}
 
-        update_dict = preferences_data.model_dump(exclude_unset=True)
+        update_dict = pref.model_dump(exclude_unset=True)
         for key, value in update_dict.items():
             if value is not None:
                 current_prefs[key] = value
 
         user.preferences = current_prefs
-        user.updated_at = datetime.now(timezone.utc)
+        self._mark_updated(user)
 
-        await self.db.commit()
-        await self.db.refresh(user)
+        await self._save_user(user)
 
         logger.info(
             f"Preferences updated for user: {user.email} (ID: {user.id})")
@@ -321,10 +422,7 @@ class UserService:
         Raises:
             NotFoundError: If user not found
         """
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            raise NotFoundError("User not found")
-
+        user = await self._get_user_or_404(user_id)
         return user.preferences or self._get_default_preferences()
 
     async def deactivate_user(self, user_id: int) -> bool:
@@ -399,16 +497,4 @@ class UserService:
         logger.info(f"User email verified: {user.email} (ID: {user.id})")
         return True
 
-    @staticmethod
-    def _get_default_preferences() -> Dict[str, Any]:
-        """Get default user preferences for dual-agent system"""
-        return {
-            "learning_style": "logical",
-            "difficulty_level": "intermediate",
-            "buddy_personality": "enthusiastic",
-            "conversation_pace": "moderate",
-            "language": "en",
-            "enable_hints": True,
-            "enable_animations": True,
-            "theme": "light"
-        }
+
