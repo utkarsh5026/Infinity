@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy import MetaData
 from typing import AsyncGenerator
 from loguru import logger
@@ -12,9 +12,10 @@ DATABASE_URL = settings.DATABASE_URL
 
 engine = create_async_engine(
     DATABASE_URL,
-    pool_pre_ping=True,
     pool_recycle=300,
-    echo=settings.DATABASE_ECHO
+    echo=settings.DATABASE_ECHO,
+    pool_size=5,
+    max_overflow=10
 )
 
 
