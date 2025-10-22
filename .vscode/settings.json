@@ -1,5 +1,10 @@
 {
     "java.compile.nullAnalysis.mode": "automatic",
     "java.configuration.updateBuildConfiguration": "interactive",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "cSpell.words": [
+        "ilike",
+        "onupdate",
+        "prefs"
+    ]
 }
