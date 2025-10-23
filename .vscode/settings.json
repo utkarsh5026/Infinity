@@ -3,8 +3,10 @@
     "java.configuration.updateBuildConfiguration": "interactive",
     "python-envs.pythonProjects": [],
     "cSpell.words": [
+        "autoflush",
         "ilike",
         "onupdate",
-        "prefs"
+        "prefs",
+        "sessionmaker"
     ]
 }
