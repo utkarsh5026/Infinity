@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "sqlite:///./infinity.db"
+    TEST_DATABASE_URL: Optional[str] = None  # Override for testing
     DATABASE_ECHO: bool = False
 
     # Redis Cache
@@ -99,7 +100,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
-        env_parse_none_str='null'
+        env_parse_none_str='null',
+        extra='ignore'  # Ignore extra environment variables
     )
 
 
